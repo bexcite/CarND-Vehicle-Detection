@@ -1,4 +1,5 @@
 import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 from skimage.feature import hog
@@ -240,11 +241,12 @@ def get_outer_bboxes(labels):
 
 
 def draw_labeled_bboxes(img, labels):
+    draw_image = np.copy(img)
     bboxes = get_outer_bboxes(labels)
     for box in bboxes:
-      cv2.rectangle(img, box[0], box[1], (0,255,0), 6)
+      cv2.rectangle(draw_image, box[0], box[1], (0,255,0), 6)
     # Return the image
-    return img
+    return draw_image
 
 
 def apply_threshold(heatmap, threshold):
@@ -274,6 +276,23 @@ def save_output_img(img, fname):
       imgN = img
   misc.imsave('output_images/output_%s.png' % fname, imgN)
 
+def get_fig_image(fig):
+  # http://www.itgo.me/a/1944619462852588132/matplotlib-save-plot-to-numpy-array
+  # This is very BAD hack ....
+  fig.savefig('output_images/tmp.png')
+  # fig.canvas.draw()
+  # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+  # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+  # plt.close(fig)
+  plt.close(fig)
+  img = cv2.imread('output_images/tmp.png')
+  img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+  # from scipy import misc
+  # img = misc.imread('output_images/temp.png')
+  return img
+
+def bin_to_rgb(bin_image):
+  return cv2.cvtColor(bin_image*255, cv2.COLOR_GRAY2RGB)
 
 def compose_images(dst, src, nrows, ncols, num):
   assert 0 < num <= nrows * ncols
