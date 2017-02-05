@@ -2,6 +2,7 @@ import matplotlib.image as mpimg
 import numpy as np
 import cv2
 from skimage.feature import hog
+import time
 
 # Define a function to return HOG features and visualization
 def get_hog_features(img, orient, pix_per_cell, cell_per_block,
@@ -61,6 +62,7 @@ def extract_features_img(image, color_space='RGB', spatial_size=(32, 32),
       elif color_space == 'YCrCb':
           feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
   else: feature_image = np.copy(image)
+  # print('image=', feature_image)
 
   if spatial_feat == True:
       spatial_features = bin_spatial(feature_image, size=spatial_size)
@@ -69,6 +71,7 @@ def extract_features_img(image, color_space='RGB', spatial_size=(32, 32),
       # Apply color_hist()
       hist_features = color_hist(feature_image, nbins=hist_bins)
       features.append(hist_features)
+  # t = time.time()
   if hog_feat == True:
   # Call get_hog_features() with vis=False, feature_vec=True
       if hog_channel == 'ALL':
@@ -83,8 +86,15 @@ def extract_features_img(image, color_space='RGB', spatial_size=(32, 32),
                       pix_per_cell, cell_per_block, vis=False, feature_vec=True)
       # Append the new feature vector to the features list
       features.append(hog_features)
+      t2 = time.time()
+      # print('hog_time %.4f seconds' % (t2-t))
   return np.concatenate(features)
 
+
+def imread(f):
+  image = cv2.imread(f)
+  image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+  return image
 
 
 # Define a function to extract features from a list of images
@@ -98,7 +108,10 @@ def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
     # Iterate through the list of images
     for file in imgs:
         # Read in each one by one
-        image = mpimg.imread(file)
+        # image = mpimg.imread(file)
+        image = imread(file)
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
         file_features = extract_features_img(image, color_space=color_space, spatial_size=spatial_size,
                                 hist_bins=hist_bins, orient=orient,
                                 pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=hog_channel,
@@ -172,17 +185,30 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
         #                     cell_per_block=cell_per_block,
         #                     hog_channel=hog_channel, spatial_feat=spatial_feat,
         #                     hist_feat=hist_feat, hog_feat=hog_feat)
+        # t = time.time()
         features = extract_features_img(test_img, color_space=color_space, spatial_size=spatial_size,
                                 hist_bins=hist_bins, orient=orient,
                                 pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=hog_channel,
                                 spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat)
+        # t2 = time.time()
+        # print('extr_feat_time %.4f seconds' % (t2-t))
+
         #5) Scale extracted features to be fed to classifier
         test_features = scaler.transform(np.array(features).reshape(1, -1))
+        # t3 = time.time()
+        # print('scaler_time %.4f seconds' % (t3-t2))
         #6) Predict using your classifier
         prediction = clf.predict(test_features)
+        # t4 = time.time()
+        # print('prediction_time %.4f seconds' % (t4-t3))
+        # decision = clf.decision_function(test_features)
         #7) If positive (prediction == 1) then save the window
         if prediction == 1:
             on_windows.append(window)
+            # decision = clf.decision_function(test_features)
+            # print('decision_function = ', decision)
+        # elif decision > 0:
+        #     print('FILTERED decision_function = ', decision)
         # else:
         #   # DEBUG Purpose
         #   decision = clf.decision_function(test_features)
@@ -200,6 +226,25 @@ def add_heat(heatmap, bbox_list):
 
     # Return updated heatmap
     return heatmap
+
+
+def get_outer_bboxes(labels):
+  bboxes = []
+  for car in range(1, labels[1] + 1):
+    nonzero = (labels[0] == car).nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+    bboxes.append(bbox)
+  return bboxes
+
+
+def draw_labeled_bboxes(img, labels):
+    bboxes = get_outer_bboxes(labels)
+    for box in bboxes:
+      cv2.rectangle(img, box[0], box[1], (0,255,0), 6)
+    # Return the image
+    return img
 
 
 def apply_threshold(heatmap, threshold):
@@ -251,3 +296,9 @@ def compose_images(dst, src, nrows, ncols, num):
   nc = (num - 1) % ncols
   dst[nr * img.shape[0]:(nr + 1) * img.shape[0], nc * img.shape[1]:(nc + 1) * img.shape[1]] = img
   return dst
+
+
+# Normalize data
+def normalize(data):
+    pixel_depth = 255
+    return (data - pixel_depth / 2) / pixel_depth
