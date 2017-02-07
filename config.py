@@ -13,9 +13,10 @@ class Config(object):
   spatial_feat = True # Spatial features on or off
   hist_feat = True # Histogram features on or off
   hog_feat = True # HOG features on or off
-  y_start_stop = [300, 720] # Min and max in y to search in slide_window()
+  y_start_stop = [400, 620] # Min and max in y to search in slide_window()
   overlap_factor_x = 0.75
   overlap_factor_y = 0.75
+  window_sizes = [144, 128, 96] # [256, 224, 192, 160, 128, 96, 64]
 
 
 '''

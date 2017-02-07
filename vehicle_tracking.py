@@ -33,13 +33,26 @@ class VehicleTracker(object):
 
   def process_image(self, image):
     config = self.config
-    window_sizes = [160, 128, 96] # [256, 224, 192, 160, 128, 96, 64]
+
+    window_sizes = config.window_sizes
     window_sizes_box = [(b, b) for b in window_sizes]
     overlap_factor_x = self.config.overlap_factor_x
     overlap_factor_y = self.config.overlap_factor_y
     svc = self.svc
     scaler = self.scaler
 
+    ## Generate list of windows for the search
+    far_window1 = (
+      (200, config.y_start_stop[0]),
+      (1180, (config.y_start_stop[0] + config.y_start_stop[1])//2)
+    )
+
+    far_window2 = (
+      (300, config.y_start_stop[0]),
+      (1080, config.y_start_stop[0] + int((config.y_start_stop[1] - config.y_start_stop[0])*0.4))
+    )
+
+    ## Genetate windows only once per video
     if len(self.all_windows) == 0:
       # Calculate all_windows positions (only once)
       t0 = time.time()
@@ -47,6 +60,14 @@ class VehicleTracker(object):
           windows = slide_window(image.shape, x_start_stop=[None, None], y_start_stop=config.y_start_stop,
                           xy_window=window_size, xy_overlap=(overlap_factor_x, overlap_factor_y))
           self.all_windows.extend(windows)
+      far_windows1 = slide_window(image.shape, x_start_stop=[far_window1[0][0], far_window1[1][0]], y_start_stop=[far_window1[0][1], far_window1[1][1]],
+                      xy_window=(72, 72), xy_overlap=(overlap_factor_x, overlap_factor_y))
+      # print('far_windows1 len =', len(far_windows1))
+      far_windows2 = slide_window(image.shape, x_start_stop=[far_window2[0][0], far_window2[1][0]], y_start_stop=[far_window2[0][1], far_window2[1][1]],
+                      xy_window=(48, 48), xy_overlap=(overlap_factor_x, overlap_factor_y))
+      # print('far_windows2 len =', len(far_windows2))
+      self.all_windows.extend(far_windows1)
+      self.all_windows.extend(far_windows2)
       print('all_windows len = %d, Time: %.4f seconds' % (len(self.all_windows), (time.time() - t0)))
 
 
@@ -65,12 +86,21 @@ class VehicleTracker(object):
                             hog_channel=config.hog_channel, spatial_feat=config.spatial_feat,
                             hist_feat=config.hist_feat, hog_feat=config.hog_feat)
 
+    # print('all_hot = ', len(all_hot_windows))
+
     # Additionally add search windows from previous car position to better search in previous locations
     prev_cars_windows = cars_search_windows(image, self.prev_car_bboxes)
 
-    ## Draw Prev cars windows Boxes
+    ## Draw ALL ALL Boxes
     draw_image = np.copy(image)
-    pwindows_img = draw_boxes(draw_image, prev_cars_windows, color=(255, 0, 0), thick=3)
+    pwindows_img = draw_boxes(draw_image, self.all_windows, color=(0, 96, 0), thick=1)
+    pwindows_img = draw_boxes(pwindows_img, [far_window1, far_window2], color=(0, 196, 0), thick=2)
+    # compose_images(resImg, pwindows_img, 2, 2, 3)
+
+
+    ## Draw Prev cars windows Boxes
+    # draw_image = np.copy(image)
+    pwindows_img = draw_boxes(pwindows_img, prev_cars_windows, color=(255, 0, 0), thick=2)
     compose_images(resImg, pwindows_img, 2, 2, 3)
 
 
@@ -84,8 +114,7 @@ class VehicleTracker(object):
     # print('prev_cars_hot = ', len(prev_cars_hot_windows))
     all_hot_windows.extend(prev_cars_hot_windows)
 
-
-    ## Draw All Boxes
+    ## Draw All Hot Boxes
     draw_image = np.copy(image)
     windows_img = draw_boxes(draw_image, all_hot_windows, color=(0, 0, 255), thick=2)
     compose_images(resImg, windows_img, 2, 2, 1)
@@ -97,7 +126,7 @@ class VehicleTracker(object):
     ## Draw Heat Map 1
     final_map = np.clip(heat, 0, 255)
     fig = plt.figure(figsize=(10, 5))
-    plt.title('Start')
+    plt.title('Initial Labels', fontsize=20)
     plt.imshow(final_map, cmap='hot')
     data = get_fig_image(fig)
     compose_images(resImg, data, 4, 4, 3)
@@ -109,7 +138,7 @@ class VehicleTracker(object):
     ## Draw Heat Map 2
     final_map = np.clip(heat, 0, 255)
     fig = plt.figure(figsize=(10, 5))
-    plt.title('With Prev Car')
+    plt.title('Labels With Prev Cars', fontsize=20)
     plt.imshow(final_map, cmap='hot')
     data = get_fig_image(fig)
     compose_images(resImg, data, 4, 4, 4)
@@ -120,7 +149,7 @@ class VehicleTracker(object):
     ## Draw Heat Map 3
     final_map = np.clip(heat, 0, 255)
     fig = plt.figure(figsize=(10, 5))
-    plt.title('Thresholded')
+    plt.title('Labels + Cars + Thresholded > 3', fontsize=20)
     plt.imshow(final_map, cmap='hot')
     data = get_fig_image(fig)
     compose_images(resImg, data, 4, 4, 7)
@@ -130,7 +159,7 @@ class VehicleTracker(object):
 
     ## Draw Label Map
     fig = plt.figure(figsize=(10, 5))
-    plt.title('%d cars found' % labels[1])
+    plt.title('Final: %d cars found' % labels[1], fontsize=20)
     plt.imshow(labels[0], cmap='gray')
     data = get_fig_image(fig)
     compose_images(resImg, data, 4, 4, 8)
@@ -148,7 +177,7 @@ class VehicleTracker(object):
 
     # Combine Prev and Current
     self.prev_car_bboxes, self.prev_car_ages = combine_with_prev(self.prev_car_bboxes,
-        self.prev_car_ages, car_bboxes, prev_factor=0.8, fresh_age = 2)
+        self.prev_car_ages, car_bboxes, prev_factor=0.9, fresh_age = 2, merge_overlap=0.7)
 
     ## Draw Outer Box
     bbox_image = draw_boxes(image, self.prev_car_bboxes, color = (0,255,0), thick = 6)
@@ -156,7 +185,7 @@ class VehicleTracker(object):
     compose_images(resImg, bbox_image, 2, 2, 4)
 
     # Save test image
-    if self.counter % 5 == 0:
+    if self.counter % 1 == 0:
       save_output_img(resImg, "%s_%4d" % (self.save_time, self.counter))
 
     self.counter += 1

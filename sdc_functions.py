@@ -350,12 +350,20 @@ def find_max_intersection(cars_list, box):
             max_ind = ind
     return max_v, max_ind
 
+def box_area(box):
+  return (box[1][0] - box[0][0]) * (box[1][1] - box[0][1])
 
-def combine_with_prev(prev, prev_age, curr, prev_factor=0.8, fresh_age = 2):
+
+def combine_with_prev(prev, prev_age, curr, prev_factor=0.8, fresh_age = 2, merge_overlap=0.6):
+
+    print('in: prev = ', len(prev), ' curr =', len(curr))
+
     new_cars = []
     new_cars_age = []
+
     prev_cars = prev[:]
     prev_cars_age = prev_age[:]
+
     curr_cars = curr[:]
     fresh_car_age = fresh_age
 
@@ -363,11 +371,31 @@ def combine_with_prev(prev, prev_age, curr, prev_factor=0.8, fresh_age = 2):
         prev_car = prev_cars.pop()
         prev_car_age = prev_cars_age.pop()
         inter_v, inter_ind = find_max_intersection(curr_cars, prev_car)
+        print('inter_v =', inter_v, ' inter_ind =', inter_ind)
         if inter_v > 0:
-            # Found car in a curr list
-            new_cars.append(combine_boxes(prev_car, curr_cars[inter_ind], prev_factor=prev_factor))
+            # Found car in a curr list, let's merge others overlap
+            prev_car_combined = prev_car
+            while inter_v > 0 and len(curr_cars) > 0:
+              print('combine inter_v =', inter_v, ' inter_ind =', inter_ind)
+              prev_car_combined = combine_boxes(prev_car_combined, curr_cars[inter_ind], prev_factor=prev_factor)
+              del curr_cars[inter_ind]
+              inter_v, inter_ind = find_max_intersection(curr_cars, prev_car_combined)
+              print('o: inter_v =', inter_v, ' inter_ind =', inter_ind)
+              if inter_v > 0:
+                print('box area curr =', box_area(curr_cars[inter_ind]), ' box area prev =', box_area(prev_car_combined))
+                if (inter_v > merge_overlap * box_area(curr_cars[inter_ind]) or inter_v > merge_overlap * box_area(prev_car_combined)):
+                  # Continue to merge with prev
+                  print('continue')
+                  continue
+              break
+              #     # Finish merging
+              #     break
+              # else:
+              #   break
+
+            new_cars.append(prev_car_combined)
             new_cars_age.append(fresh_car_age)
-            del curr_cars[inter_ind]
+
         else:
             # Not found in curr list, check for age
             if prev_car_age > 0:
@@ -381,32 +409,98 @@ def combine_with_prev(prev, prev_age, curr, prev_factor=0.8, fresh_age = 2):
     # Add all other current cars to the list of new cars
     while len(curr_cars) > 0:
         curr_car = curr_cars.pop()
+
         new_cars.append(curr_car)
         new_cars_age.append(fresh_car_age)
 
-    return new_cars, new_cars_age
+    print('out: new_cars = ', len(new_cars))
+
+    # Check cars that we can merge (merge_overlap exceeds)
+    new_cars_merged = []
+    new_cars_merged_age = []
+    while len(new_cars) > 0:
+      car = new_cars.pop()
+      car_age = new_cars_age.pop()
+      inter_v, inter_ind = find_max_intersection(new_cars, car)
+      while inter_v > 0:
+        print('i: inter_v =', inter_v, ' car =', box_area(car), ' new_cars[inter_ind] =', box_area(new_cars[inter_ind]))
+        if inter_v > merge_overlap * box_area(new_cars[inter_ind]):
+          # Car main
+          print('merged car main')
+          car = combine_boxes(car, new_cars[inter_ind], prev_factor=prev_factor)
+          car_age = max(car_age, new_cars_age[inter_ind])
+          del new_cars[inter_ind]
+          del new_cars_age[inter_ind]
+          inter_v, inter_ind = find_max_intersection(new_cars, car)
+        elif inter_v > merge_overlap * box_area(car):
+          # New_cars main
+          print('merged new_cars main')
+          car = combine_boxes(new_cars[inter_ind], car, prev_factor=prev_factor)
+          car_age = max(car_age, new_cars_age[inter_ind])
+          del new_cars[inter_ind]
+          del new_cars_age[inter_ind]
+          inter_v, inter_ind = find_max_intersection(new_cars, car)
+        else:
+          # No more valuable intersections for the current car
+          break
+
+      new_cars_merged.append(car)
+      new_cars_merged_age.append(car_age)
+
+    print('out: new_cars_merged = ', len(new_cars_merged), ' age =', len(new_cars_merged_age))
+
+    return new_cars_merged, new_cars_merged_age
+
+def get_window_around(image, point, window_size):
+    maxX, maxY = image.shape[1] - 1, image.shape[0] - 1
+    x1 = point[0] - window_size//2
+    x2 = point[0] + window_size//2
+    y1 = point[1] - window_size//2
+    y2 = point[1] + window_size//2
+    # Clip
+    if x1 < 0: x1 = 0
+    if x2 > maxX: x2 = maxX
+    if y1 < 0: y1 = 0
+    if y2 > maxY: y2 = maxY
+    return ((x1,y1),(x2,y2))
+
+
+def get_detailed_windows(image, car_box, window_sizes):
+    # print('cw =', cw)
+    cX = (car_box[1][0] + car_box[0][0])//2
+    cY = (car_box[1][1] + car_box[0][1])//2
+    # print('cX =', cX, ' cY=', cY)
+
+    # Get the half of the smallest window
+    delta = int(window_sizes[-1] * 0.5)
+
+    # Shift window to delta in each direction
+    deltak = [
+        (-1,-1), (0,-1), (1,-1),
+        (-1, 0), (0, 0), (1, 0),
+        (-1, 1), (0, 1), (1, 1)
+    ]
+
+    # Iterate over all window_sizes and all positions
+    windows = []
+    for wind in window_sizes:
+        for k in deltak:
+            kx, ky = k[0], k[1]
+            cx = int(cX + kx * delta)
+            cy = int(cY + ky * delta)
+            w = get_window_around(image, (cx, cy), wind)
+            windows.append(w)
+      # print('app ', ((x1,y1),(x2,y2)))
+    return windows
+
 
 def cars_search_windows(image, prev_cars):
   maxX, maxY = image.shape[1] - 1, image.shape[0] - 1
   cars_windows = []
-  window_sizes = [256, 224, 192, 160, 128, 96, 64] # [256, 224, 192, 160, 128, 96, 64]
+  window_sizes = [128, 96, 80, 64, 48] # [256, 224, 192, 160, 128, 96, 64]
   for cw in prev_cars:
-    # print('cw =', cw)
-    cX = (cw[1][0] + cw[0][0])//2
-    cY = (cw[1][1] + cw[0][1])//2
-    # print('cX =', cX, ' cY=', cY)
-    for wind in window_sizes:
-      x1 = cX - wind//2
-      x2 = cX + wind//2
-      y1 = cY - wind//2
-      y2 = cY + wind//2
-      # Clip
-      if x1 < 0: x1 = 0
-      if x2 > maxX: x2 = maxX
-      if y1 < 0: y1 = 0
-      if y2 > maxY: y2 = maxY
-      # print('app ', ((x1,y1),(x2,y2)))
-      cars_windows.append(((x1,y1),(x2,y2)))
+    wins = get_detailed_windows(image, cw, window_sizes)
+    cars_windows.extend(wins)
   return cars_windows
 
 
