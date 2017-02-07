@@ -155,7 +155,7 @@ def get_detailed_windows(image, car_box, window_sizes):
 
 ```
 
-Here how such additional windows looks on a visualization:
+Here how such additional windows look on a visualization:
 
 ![Distant windows lookup](./output_images/results/all_cars_windows_ext.png)
 
