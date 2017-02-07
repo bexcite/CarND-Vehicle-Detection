@@ -16,7 +16,19 @@ class Config(object):
   y_start_stop = [400, 620] # Min and max in y to search in slide_window()
   overlap_factor_x = 0.75
   overlap_factor_y = 0.75
+
   window_sizes = [144, 128, 96] # [256, 224, 192, 160, 128, 96, 64]
+
+  far_window1 = (
+    (200, y_start_stop[0]),
+    (1180, (y_start_stop[0] + y_start_stop[1])//2)
+  )
+  far_window2 = (
+    (300, y_start_stop[0]),
+    (1080, y_start_stop[0] + int((y_start_stop[1] - y_start_stop[0])*0.4))
+  )
+  far_window1_size = 72
+  far_window2_size = 48
 
 
 '''
