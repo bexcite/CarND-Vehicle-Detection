@@ -1,4 +1,4 @@
-# Vehicle Detection
+# Vehicle Detection and Tracking: Udacity Self-Driving Car
 [![Udacity - Self-Driving Car NanoDegree](https://s3.amazonaws.com/udacity-sdc/github/shield-carnd.svg)](http://www.udacity.com/drive)
 
 The goal is to build a vehicle tracking pipeline using Histogram of Oriented Gradients (HOG) features and trained Linear SVM classifier.
@@ -9,7 +9,7 @@ Data used in the project:
  1. [Vehicle image set](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/vehicles.zip)
  2. [Non-vehicle image set](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/non-vehicles.zip)
 
- These example images come from a combination of the [GTI vehicle image database](http://www.gti.ssr.upm.es/data/Vehicle_database.html), the [KITTI vision benchmark suite](http://www.cvlibs.net/datasets/kitti/), and examples extracted from the project video itself.  
+These example images come from a combination of the [GTI vehicle image database](http://www.gti.ssr.upm.es/data/Vehicle_database.html), the [KITTI vision benchmark suite](http://www.cvlibs.net/datasets/kitti/), and examples extracted from the project video itself.  
 
 ## Histogram of Oriented Gradients
 
@@ -36,17 +36,17 @@ Additionally to HOG features I've also added color histogram (with 16 bins) and 
 
 I've also split the all training data to train and test sets (20%). The resulting training set contained 14,208 labeled images and test set – 3,552 images.
 
-Training time ~ 20 seconds and feature extraction for all dataset ~ 116 seconds on MacBook Pro 13'.
+Training time: ~ 20 seconds, feature extraction time of all dataset: ~ 116 seconds on MacBook Pro 13'.
 
 Test accuracy of trained Linear SVC is **99.3243%**
 
 SVC classifier and scaler saved to `pickle_svc_scaler.p` file and used later in `vehicle_tracking.py`
 
-Below is an example of images from test set with prediction and a value of decision function:
+Below is an example of images from test set with a prediction and a value of a decision function:
 
-<<IMAGE>>
+![Prediction example](./output_images/results/svc_predictions.png)
 
-To train classifier on your machine first modify `train_scv.py` params (lines 17-22):
+To train a classifier on your machine first modify `train_scv.py` params (lines 17-22):
 ```
 output_file = 'pickle_svc_scaler1.p' # Changed so to avoid accidental file overwrite
 test_size = 0.2
@@ -56,7 +56,7 @@ vehicles_folder = '../vehicles'
 non_vehicles_folder = '../non-vehicles'
 ```
 
-Then run following command:
+Then run the following command:
 ```
 python train_scv.py
 ```
@@ -85,12 +85,17 @@ far_window2_size = 48
 
 Below is the image with all windows and specific distant regions:
 
-<<IMAGE>>
+![Distant windows lookup](./output_images/results/all_cars_windows.png)
 
 
 ## Thresholding and Vehicle Tracking
 
 In order to recognize a car on a heatmap I've applied threshold <= 2, so it should be at least 3 window that _votes_ for a car.
+
+Below is an example of filtered false positive that got only two points and didn't make it through a threshold:
+
+![Distant windows lookup](./output_images/results/filtering.png)
+
 
 ### Tracking vehicle from previous frame
 
@@ -99,6 +104,10 @@ Successfully recognized vehicles on one frame additionally adds a couple of poin
 It means that for a once detected car we need to have at least one detected window on a next frame that together with a previous car box forms 3 points on a heatmap that will lead to confirmed car.
 
 If car is not confirmed during next 2 frames it will be dropped on a third (age < 0). Also aging cars contribute less to the confirmation so if car missed one confirmation it's age becomes 1 and on the next frame it adds only 1 point to a heat map. Consequently if car reaches age 0 it's almost _dead_ unless we will have 3 more fresh windows that can vote for that car.
+
+Frame invalidation in action:
+
+![Merge and invalidating example](./output_images/results/merge_example.gif)
 
 ### Look for previous car locations more carefully
 
@@ -148,7 +157,7 @@ def get_detailed_windows(image, car_box, window_sizes):
 
 Here how such additional windows looks on a visualization:
 
-<<IMAGE of the rose>>
+![Distant windows lookup](./output_images/results/all_cars_windows_ext.png)
 
 ### Merge and combine previous and new cars
 
@@ -202,7 +211,8 @@ def merge_combine_cars_list(cars_list, cars_age_list, prev_factor = 0.8, merge_o
 
 The final result that was received on `project_video.mp4`
 
-<< VIDEO>>
+[![Vehicle Tracking Result](./output_images/results/preview.png)](https://youtu.be/FX_efdEmpyQ)
+
 
 ## Run Vehicle Tracking
 
@@ -220,7 +230,7 @@ There a lot of room for improvements:
 
 2. Combine line detection with dynamic area selection for each window size. It will help to reduce total number of windows to scan.
 
-3. There still some false positive on the shades under the trees. To solve this we can add more training samples to our classifier so it can recognize such situations.
+3. There still some false positive on the shades under the trees. To solve this we can add more training samples to our classifier so it can recognize such situations. Another way to filter those false positive could be a delayed recognizing of the car boxes as a car, for example we recognize outer box as a car if it only confirmed during at least 6-7 frames and then show it on the video.
 
 4. Possible use of CNN as a search and classification algorithm for cars.
 
